@@ -1,7 +1,5 @@
 # deezloader
 This project has been created to download songs, albums or playlists with Spotify or Deezer link from Deezer.
-# deezloader
-This project has been created to download songs, albums or playlists with Spotify or Deezer link from Deezer.
 * ### OS Supported ###
     ![Linux Support](https://img.shields.io/badge/Linux-Support-brightgreen.svg)
     ![macOS Support](https://img.shields.io/badge/macOS-Support-brightgreen.svg)
