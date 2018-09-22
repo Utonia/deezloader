@@ -6,12 +6,13 @@ import spotipy
 import requests
 from tqdm import tqdm
 from Crypto.Hash import MD5
+from bs4 import BeautifulSoup
 import spotipy.oauth2 as oauth2
 from mutagen.id3 import ID3, APIC
 from mutagen.easyid3 import EasyID3
 from binascii import a2b_hex, b2a_hex
 from Crypto.Cipher import AES, Blowfish
-signin = {}
+req = requests.Session()
 localdir = os.getcwd()
 def generate_token():
     credentials = oauth2.SpotifyClientCredentials(client_id="4fe3fecfe5334023a1472516cc99d805", client_secret="0f02b7c483c04257984695007a4a8d5c")
@@ -21,7 +22,13 @@ token = generate_token()
 spo = spotipy.Spotify(auth=token)
 header = {
           "Accept-Language": "en-US,en;q=0.5"
-} 
+}
+params = {
+          "api_version": "1.0",
+          "api_token": "null",
+          "input": "3",
+          "method": "deezer.getUserData"
+}
 class TrackNotFound(Exception):
       def __init__(self, message):
           super().__init__(message)
@@ -39,20 +46,11 @@ class QuotaExceeded(Exception):
           super().__init__(message)
 class Login:
       def __init__(self, mail, password):
-          signin['mail'] = mail
-          signin['pass'] = password
-          req = requests.Session()
-          params = {
-                    "api_version": "1.0",
-                    "api_token": "null",
-                    "input": "3",
-                    "method": "deezer.getUserData"
-          }
           check = json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", params).text)['results']['checkFormLogin']
           post_data = {
                        "type": "login",
-                       "mail": signin['mail'],
-                       "password": signin['pass'],
+                       "mail": mail,
+                       "password": password,
                        "checkFormLogin": check
           }
           sign = req.post("https://www.deezer.com/ajax/action.php", post_data).text
@@ -65,25 +63,10 @@ class Login:
           ids = track.split("/")[-1]
           name = ids + ".mp3"
           def login():
-              req = requests.Session()
-              params = {
-                        "api_version": "1.0",
-                        "api_token": "null",
-                        "input": "3",
-                        "method": "deezer.getUserData"
-              }
-              check = json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", params).text)['results']['checkFormLogin']
               try:
-                 post_data = {
-                              "type": "login",
-                              "mail": signin['mail'],
-                              "password": signin['pass'],
-                              "checkFormLogin": check
-                 }
-              except TypeError:
-                 raise BadCredentials("You have to log before")
-              req.post("https://www.deezer.com/ajax/action.php", post_data)
-              token = json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", params).text)['results']['checkForm']
+                 token = json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", params).text)['results']['checkForm']
+              except:
+                 token = json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", params).text)['results']['checkForm']
               data = {
                       "api_version": "1.0",
                       "input": "3",
@@ -91,7 +74,10 @@ class Login:
                       "method": "song.getData"
               }
               param = json.dumps({"sng_id": ids})
-              return json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", param, params=data).text)
+              try:
+                 return json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", param, params=data).text)
+              except:
+                 return json.loads(req.post("http://www.deezer.com/ajax/gw-light.php", param, params=data).text)
           def md5hex(data):
               h = MD5.new()
               h.update(data)
@@ -123,7 +109,10 @@ class Login:
           infos = login()
           song['md5'] = infos['results']['MD5_ORIGIN']
           song['media_version'] = infos['results']['MEDIA_VERSION']
-          fh = requests.get(genurl())
+          try:
+             fh = requests.get(genurl())
+          except:
+             fh = requests.get(genurl())
           if len(fh.content) == 0:
            raise TrackNotFound("")
           open(location + name, "wb").write(fh.content)
@@ -143,8 +132,12 @@ class Login:
           genre = []
           ar_album = []
           if "?" in URL:
-           URL,a = URL.split("?") 
-          url = json.loads(requests.get("http://api.deezer.com/track/" + URL.split("/")[-1]).text)
+           URL,a = URL.split("?")
+          URL = "http://www.deezer.com/track/" + URL.split("/")[-1]
+          try: 
+             url = json.loads(requests.get("http://api.deezer.com/track/" + URL.split("/")[-1]).text)
+          except:
+             url = json.loads(requests.get("http://api.deezer.com/track/" + URL.split("/")[-1]).text)
           try:
              if url['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
@@ -155,13 +148,23 @@ class Login:
               raise InvalidLink("Invalid link ;)")
           except KeyError:
              None
-          url1 = json.loads(requests.get("http://api.deezer.com/album/" + str(url['album']['id']), headers=header).text)
+          try:
+             url1 = json.loads(requests.get("http://api.deezer.com/album/" + str(url['album']['id']), headers=header).text)
+          except:
+             url1 = json.loads(requests.get("http://api.deezer.com/album/" + str(url['album']['id']), headers=header).text)
           try:
              if url1['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
           except KeyError:
              None
-          image = url['album']['cover_xl'].replace("1000", "1200")
+          try:   
+             image = url['album']['cover_xl'].replace("1000", "1200")   
+          except:
+             try:
+                image = requests.get(URL).text
+             except:
+                image = requests.get(URL).text
+             image = BeautifulSoup(image, "html.parser").find("img", class_="img_main").get("src").replace("120", "1200")
           music.append(url['title'])
           for a in url['contributors']:
               array.append(a['name'])
@@ -209,7 +212,10 @@ class Login:
           try:
              self.download(URL, dir)
           except TrackNotFound:
-             url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "") + " + " + artist[0].replace("#", "")).text)
+             try:
+                url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "") + " + " + artist[0].replace("#", "")).text)
+             except:
+                url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "") + " + " + artist[0].replace("#", "")).text)
              try:
                 if url['error']['message'] == "Quota limit exceeded":
                  raise QuotaExceeded("Too much requests limit yourself")
@@ -222,7 +228,10 @@ class Login:
                      break
              except IndexError:
                 try:
-                   url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
+                   try: 
+                      url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
+                   except:
+                      url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
                    try:
                       if url['error']['message'] == "Quota limit exceeded":
                        raise QuotaExceeded("Too much requests limit yourself")
@@ -239,7 +248,10 @@ class Login:
              os.rename(dir + URL.split("/")[-1] + ".mp3" , dir + name)
           except FileNotFoundError:
              None
-          image = requests.get(image).content
+          try:   
+             image = requests.get(image).content
+          except:
+             image = requests.get(image).content
           try:
              tag = EasyID3(dir + name)
              tag.delete()
@@ -278,7 +290,11 @@ class Login:
           names = []
           if "?" in URL:
            URL,a = URL.split("?")
-          url = json.loads(requests.get("http://api.deezer.com/album/" + URL.split("/")[-1], headers=header).text)
+          URL = "http://www.deezer.com/album/" + URL.split("/")[-1]
+          try: 
+             url = json.loads(requests.get("http://api.deezer.com/album/" + URL.split("/")[-1], headers=header).text)
+          except:
+             url = json.loads(requests.get("http://api.deezer.com/album/" + URL.split("/")[-1], headers=header).text)
           try:
              if url['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
@@ -289,13 +305,23 @@ class Login:
               raise InvalidLink("Invalid link ;)")
           except KeyError:
              None
-          image = url['cover_xl'].replace("1000", "1200")
+          try:
+             image = url['cover_xl'].replace("1000", "1200")
+          except:
+             try:
+                image = requests.get(URL).text
+             except:
+                image = requests.get(URL).text
+             image = BeautifulSoup(image, "html.parser").find("img", class_="img_main").get("src").replace("200", "1200")
           for a in url['tracks']['data']:
               music.append(a['title'])
               urls.append(a['link'])
           for a in url['tracks']['data']:
               del array[:]
-              ur = json.loads(requests.get("https://api.deezer.com/track/" + str(a['id'])).text)
+              try:
+                 ur = json.loads(requests.get("https://api.deezer.com/track/" + str(a['id'])).text)
+              except:
+                 ur = json.loads(requests.get("https://api.deezer.com/track/" + str(a['id'])).text)
               try:
                  if ur['error']['message'] == "Quota limit exceeded":
                   raise QuotaExceeded("Too much requests limit yourself")
@@ -330,7 +356,10 @@ class Login:
               os.makedirs(dir)
           except:
              None
-          image = requests.get(image).content
+          try:   
+             image = requests.get(image).content
+          except:
+             image = requests.get(image).content
           for a in tqdm(range(len(urls))):
               name = artist[a].replace("/", "") + " " + music[a].replace("/", "") + ".mp3"
               names.append(dir + name)
@@ -344,7 +373,10 @@ class Login:
               try:
                  self.download(urls[a], dir)
               except TrackNotFound:
-                 url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "") + " + " + artist[a].replace("#", "")).text)
+                 try:
+                    url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "") + " + " + artist[a].replace("#", "")).text)
+                 except:
+                    url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "") + " + " + artist[a].replace("#", "")).text)
                  try:
                     if url['error']['message'] == "Quota limit exceeded":
                      raise QuotaExceeded("Too much requests limit yourself")
@@ -357,7 +389,10 @@ class Login:
                          break
                  except IndexError:
                     try:
-                       url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "").split(" ")[0] + " + " + artist[a].replace("#", "")).text)
+                       try: 
+                          url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "").split(" ")[0] + " + " + artist[a].replace("#", "")).text)
+                       except:
+                          url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "").split(" ")[0] + " + " + artist[a].replace("#", "")).text)
                        try:
                           if url['error']['message'] == "Quota limit exceeded":
                            raise QuotaExceeded("Too much requests limit yourself")
@@ -401,7 +436,10 @@ class Login:
           array = []
           if "?" in URL:
            URL,a = URL.split("?")
-          url = json.loads(requests.get("https://api.deezer.com/playlist/" + URL.split("/")[-1] + "/tracks").text)
+          try: 
+             url = json.loads(requests.get("https://api.deezer.com/playlist/" + URL.split("/")[-1] + "/tracks").text)
+          except:
+             url = json.loads(requests.get("https://api.deezer.com/playlist/" + URL.split("/")[-1] + "/tracks").text)
           try:
              if url['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
@@ -448,12 +486,16 @@ class Login:
                  del array[:]
                  break
           album.append(url['album']['name'])
+          image = url['album']['images'][0]['url']
           tracknum.append(url['track_number'])
           discnum.append(url['disc_number'])
           year.append(url['album']['release_date'])
           for a in url['album']['artists']:
               ar_album.append(a['name'])
-          url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "") + " + " + artist[0].replace("#", "")).text)
+          try:    
+             url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "") + " + " + artist[0].replace("#", "")).text)
+          except:
+             url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "") + " + " + artist[0].replace("#", "")).text)
           try:
              if url['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
@@ -468,7 +510,10 @@ class Login:
                    break
            except IndexError:
               try:
-                 url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
+                 try:
+                    url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
+                 except:
+                    url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
                  try:
                     if url['error']['message'] == "Quota limit exceeded":
                      raise QuotaExceeded("Too much requests limit yourself")
@@ -487,7 +532,10 @@ class Login:
                    URL = url['data'][a]['link']
                    break
            except IndexError:
-              url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
+              try:
+                 url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
+              except:
+                 url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[0].replace("#", "").split(" ")[0] + " + " + artist[0].replace("#", "")).text)
               try:
                  if url['error']['message'] == "Quota limit exceeded":
                   raise QuotaExceeded("Too much requests limit yourself")
@@ -498,14 +546,19 @@ class Login:
                    URL = url['data'][a]['link']
                    break
           song = music[0] + " - " + artist[0]
-          url = json.loads(requests.get("http://api.deezer.com/track/" + URL.split("/")[-1]).text)
+          try:
+             url = json.loads(requests.get("http://api.deezer.com/track/" + URL.split("/")[-1]).text)
+          except:
+             url = json.loads(requests.get("http://api.deezer.com/track/" + URL.split("/")[-1]).text)
           try:
              if url['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
           except KeyError:
              None
-          image = url['album']['cover_xl'].replace("1000", "1200")
-          url1 = json.loads(requests.get("http://api.deezer.com/album/" + str(url['album']['id']), headers=header).text)
+          try:
+             url1 = json.loads(requests.get("http://api.deezer.com/album/" + str(url['album']['id']), headers=header).text)
+          except:
+             url1 = json.loads(requests.get("http://api.deezer.com/album/" + str(url['album']['id']), headers=header).text)
           try:
              if url1['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
@@ -535,7 +588,10 @@ class Login:
              os.rename(dir + URL.split("/")[-1] + ".mp3" , dir + name)
           except FileNotFoundError:
              None
-          image = requests.get(image).content
+          try:
+             image = requests.get(image).content
+          except:
+             image = requests.get(image).content
           try:
              tag = EasyID3(dir + name)
              tag.delete()
@@ -626,7 +682,10 @@ class Login:
               os.makedirs(dir)
           except:
              None
-          url = json.loads(requests.get('https://api.deezer.com/search/?q=artist:"' + artis.replace("#", "") + '" album:"' + album[0].replace("#", "") + '"').text)
+          try:   
+             url = json.loads(requests.get('https://api.deezer.com/search/?q=artist:"' + artis.replace("#", "") + '" album:"' + album[0].replace("#", "") + '"').text)
+          except:
+             url = json.loads(requests.get('https://api.deezer.com/search/?q=artist:"' + artis.replace("#", "") + '" album:"' + album[0].replace("#", "") + '"').text)
           try:
              if url['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
@@ -639,13 +698,15 @@ class Login:
                   break
           except IndexError:
              raise AlbumNotFound("Album not found: " + album[0])
-          url = json.loads(requests.get("https://api.deezer.com/album/" + URL, headers=header).text)
+          try:   
+             url = json.loads(requests.get("https://api.deezer.com/album/" + URL, headers=header).text)
+          except:
+             url = json.loads(requests.get("https://api.deezer.com/album/" + URL, headers=header).text)
           try:
              if url['error']['message'] == "Quota limit exceeded":
               raise QuotaExceeded("Too much requests limit yourself")
           except KeyError:
              None
-          image = url['cover_xl'].replace("1000", "1200")
           for a in url['tracks']['data']:
               urls.append(a['link'])
           try:
@@ -653,7 +714,10 @@ class Login:
                  genre.append(a['name'])
           except KeyError:
              None
-          image = requests.get(image).content
+          try:   
+             image = requests.get(image).content
+          except:
+             image = requests.get(image).content   
           if len(urls) < len(music):
            idk = len(urls)
           elif len(urls) > len(music):
@@ -673,7 +737,10 @@ class Login:
               try:
                  self.download(urls[a], dir)
               except TrackNotFound:
-                 url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "") + " + " + artist[a].replace("#", "")).text)
+                 try:
+                    url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "") + " + " + artist[a].replace("#", "")).text)
+                 except:
+                    url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "") + " + " + artist[a].replace("#", "")).text)
                  try:
                    if url['error']['message'] == "Quota limit exceeded":
                     raise QuotaExceeded("Too much requests limit yourself")
@@ -686,7 +753,10 @@ class Login:
                          break
                  except IndexError:
                     try:
-                       url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "").split(" ")[0] + " + " + artist[a].replace("#", "")).text)
+                       try: 
+                          url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "").split(" ")[0] + " + " + artist[a].replace("#", "")).text)
+                       except:
+                          url = json.loads(requests.get("https://api.deezer.com/search/track/?q=" + music[a].replace("#", "").split(" ")[0] + " + " + artist[a].replace("#", "")).text)
                        try:
                           if url['error']['message'] == "Quota limit exceeded":
                            raise QuotaExceeded("Too much requests limit yourself")
